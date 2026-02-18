@@ -29,6 +29,34 @@ def label_to_char(label: int) -> str:
     return IDX_TO_CHAR.get(label, "?")
 
 
+def get_hand_angle(landmarks, fw, fh):
+    """Degrees the hand is rotated from vertical (0° = fingers point up)."""
+    wrist = landmarks[0]
+    mid_mcp = landmarks[9]
+    dx = (mid_mcp.x - wrist.x) * fw
+    dy = (mid_mcp.y - wrist.y) * fh
+    return np.degrees(np.arctan2(dx, -dy))
+
+
+def make_square_box(x1, y1, x2, y2, img_w, img_h, margin=20):
+    """Expand bounding box to a square with extra margin for rotation."""
+    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+    side = max(x2 - x1, y2 - y1) // 2 + margin
+    x1 = max(cx - side, 0)
+    y1 = max(cy - side, 0)
+    x2 = min(cx + side, img_w)
+    y2 = min(cy + side, img_h)
+    return x1, y1, x2, y2
+
+
+def rotate_roi(roi_bgr, angle_deg):
+    """Rotate ROI around its center to normalize hand orientation."""
+    rh, rw = roi_bgr.shape[:2]
+    M = cv2.getRotationMatrix2D((rw / 2, rh / 2), angle_deg, 1.0)
+    return cv2.warpAffine(roi_bgr, M, (rw, rh),
+                          borderMode=cv2.BORDER_REPLICATE)
+
+
 def preprocess_roi(roi_bgr: np.ndarray) -> np.ndarray:
     """Convert BGR ROI to 28x28 grayscale tensor for CNN."""
     gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
@@ -122,16 +150,19 @@ def main():
             xs = [p.x for p in lm]
             ys = [p.y for p in lm]
 
-            # Bounding box with padding
+            # Bounding box → square with padding (needed for clean rotation)
             pad = 20
             x1 = int(max(min(xs) * w - pad, 0))
             y1 = int(max(min(ys) * h - pad, 0))
             x2 = int(min(max(xs) * w + pad, w))
             y2 = int(min(max(ys) * h + pad, h))
+            x1, y1, x2, y2 = make_square_box(x1, y1, x2, y2, w, h)
 
             roi = frame[y1:y2, x1:x2]
 
             if roi.size > 0:
+                angle = get_hand_angle(lm, w, h)
+                roi = rotate_roi(roi, angle)
                 x = preprocess_roi(roi)
                 probs = model.predict(x, verbose=0)[0]
                 pred = int(np.argmax(probs))
@@ -157,9 +188,9 @@ def main():
             # Draw hand landmarks
             mp_draw.draw_landmarks(frame, hand_lm, mp_hands.HAND_CONNECTIONS)
 
-            # Show 28x28 ROI preview (top-right corner)
+            # Show 28x28 ROI preview (top-right, after rotation)
             if roi.size > 0:
-                small = preprocess_roi(roi).reshape(28, 28)
+                small = x.reshape(28, 28)
                 small = (small * 255).astype(np.uint8)
                 small = cv2.resize(small, (140, 140), interpolation=cv2.INTER_NEAREST)
                 small = cv2.cvtColor(small, cv2.COLOR_GRAY2BGR)
