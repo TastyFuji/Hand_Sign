@@ -175,7 +175,7 @@ python train.py
 
 ---
 
-## FAQ — คำถามที่อาจารย์อาจถาม
+## FAQ — ถาม/ตอบ
 
 ### Q: ทำไมเลือกใช้ CNN ไม่ใช้โมเดลอื่น?
 CNN เหมาะกับ image classification เพราะ convolutional layer สามารถเรียนรู้ spatial hierarchy ของ features ได้ (ขอบ → รูปทรง → ท่ามือ) โดยไม่ต้อง hand-craft features เอง ซึ่งต่างจาก traditional ML เช่น SVM หรือ Random Forest ที่ต้อง extract features ก่อน
